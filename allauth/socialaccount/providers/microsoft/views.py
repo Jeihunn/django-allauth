@@ -1,7 +1,4 @@
-from __future__ import unicode_literals
-
 import json
-import requests
 
 from allauth.core import context
 from allauth.socialaccount import app_settings
@@ -12,8 +9,6 @@ from allauth.socialaccount.providers.oauth2.views import (
     OAuth2CallbackView,
     OAuth2LoginView,
 )
-
-from .provider import MicrosoftGraphProvider
 
 
 def _check_errors(response):
@@ -35,7 +30,7 @@ def _check_errors(response):
 
 
 class MicrosoftGraphOAuth2Adapter(OAuth2Adapter):
-    provider_id = MicrosoftGraphProvider.id
+    provider_id = "microsoft"
 
     def _build_tenant_url(self, path):
         settings = app_settings.PROVIDERS.get(self.provider_id, {})
@@ -75,10 +70,14 @@ class MicrosoftGraphOAuth2Adapter(OAuth2Adapter):
 
     def complete_login(self, request, app, token, **kwargs):
         headers = {"Authorization": "Bearer {0}".format(token.token)}
-        response = requests.get(
-            self.profile_url,
-            params=self.profile_url_params,
-            headers=headers,
+        response = (
+            get_adapter()
+            .get_requests_session()
+            .get(
+                self.profile_url,
+                params=self.profile_url_params,
+                headers=headers,
+            )
         )
         extra_data = _check_errors(response)
         return self.get_provider().sociallogin_from_response(request, extra_data)

@@ -6,9 +6,12 @@ stdenv.mkDerivation {
         black
         gettext
         isort
+        djlint
+        nodejs
         python310
         python310Packages.django
         python310Packages.flake8
+        python310Packages.debugpy
         python310Packages.pycodestyle
         python310Packages.pyls-flake8
         python310Packages.pylsp-rope
@@ -22,7 +25,11 @@ stdenv.mkDerivation {
         python310Packages.sphinx-rtd-theme
         python310Packages.requests-oauthlib
         python310Packages.tox
+        python310Packages.daphne
         sphinx
         twine
     ];
+    shellHook = ''
+        export PATH="$PWD/node_modules/.bin/:$PATH"
+    '';
 }

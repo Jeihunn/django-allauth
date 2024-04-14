@@ -1,22 +1,19 @@
 import re
-import requests
 
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
 
 from allauth.core.exceptions import ImmediateHttpResponse
+from allauth.socialaccount.adapter import get_adapter
 from allauth.socialaccount.providers.oauth2.views import (
     OAuth2Adapter,
     OAuth2CallbackView,
     OAuth2LoginView,
 )
 
-from .provider import ShopifyProvider
-
 
 class ShopifyOAuth2Adapter(OAuth2Adapter):
-    provider_id = ShopifyProvider.id
-    supports_state = False
+    provider_id = "shopify"
     scope_delimiter = ","
 
     def _shop_domain(self):
@@ -50,7 +47,9 @@ class ShopifyOAuth2Adapter(OAuth2Adapter):
 
     def complete_login(self, request, app, token, **kwargs):
         headers = {"X-Shopify-Access-Token": "{token}".format(token=token.token)}
-        response = requests.get(self.profile_url, headers=headers)
+        response = (
+            get_adapter().get_requests_session().get(self.profile_url, headers=headers)
+        )
         extra_data = response.json()
         associated_user = kwargs["response"].get("associated_user")
         if associated_user:

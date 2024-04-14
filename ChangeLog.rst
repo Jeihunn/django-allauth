@@ -1,4 +1,143 @@
-0.59.0 (unreleased)
+0.62.0 (unreleased)
+*******************
+
+Note worthy changes
+-------------------
+
+- Added a dummy provider, useful for testing purposes: ``allauth.socialaccount.providers.dummy``.
+
+- Added a new provider, Atlassian
+
+- Next URL handling been streamlined to be consistently applied. Previously, the
+  password reset, change and email confirmation views only supported the
+  ``success_url`` class-level property.
+
+- Added support for logging in by email using a special code, also known as
+  "Magic Code Login"
+
+
+Backwards incompatible changes
+------------------------------
+
+- The django-allauth required dependencies are now more fine grained.  If you do
+  not use any of the social account functionality, a `pip install
+  django-allauth` will, e.g., no longer pull in dependencies for handling
+  JWT. If you are using social account functionality, install using `pip install
+  django-allauth[socialaccount]`.  That will install the dependencies covering
+  most common providers. If you are using the Steam provider, install using `pip
+  install django-allauth[socialaccount,steam]`.
+
+
+0.61.1 (2024-02-09)
+*******************
+
+Fixes
+-----
+
+- Fixed a ``RuntimeWarning`` that could occur when running inside an async
+  environment (``'SyncToAsync' was never awaited``).
+
+
+Security notice
+---------------
+
+- As part of the Google OAuth handshake, an ID token is obtained by direct
+  machine to machine communication between the server running django-allauth and
+  Google. Because of this direct communication, we are allowed to skip checking
+  the token signature according to the `OpenID Connect Core 1.0 specification
+  <https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation>`_.
+  However, as django-allauth is used and built upon by third parties, this is an
+  implementation detail with security implications that is easily overlooked. To
+  mitigate potential issues, verifying the signature is now only skipped if it
+  was django-allauth that actually fetched the access token.
+
+
+0.61.0 (2024-02-07)
+*******************
+
+Note worthy changes
+-------------------
+
+- Added support for account related security notifications. When
+  ``ACCOUNT_EMAIL_NOTIFICATIONS = True``, email notifications such as "Your
+  password was changed", including information on user agent / IP address from where the change
+  originated, will be emailed.
+
+- Google: Starting from 0.52.0, the ``id_token`` is being used for extracting
+  user information.  To accommodate for scenario's where django-allauth is used
+  in contexts where the ``id_token`` is not posted, the provider now looks up
+  the required information from the ``/userinfo`` endpoint based on the access
+  token if the ``id_token`` is absent.
+
+
+Security notice
+---------------
+
+- MFA: It was possible to reuse a valid TOTP code within its time window. This
+  has now been addressed. As a result, a user can now only login once per 30
+  seconds (``MFA_TOTP_PERIOD``).
+
+
+Backwards incompatible changes
+------------------------------
+
+- The rate limit mechanism has received an update. Previously, when specifying
+  e.g. ``"5/m"`` it was handled implicitly whether or not that limit was per IP,
+  per user, or per action specific key. This has now been made explicit:
+  ``"5/m/user"`` vs ``"5/m/ip"`` vs ``"5/m/key"``. Combinations are also supported
+  now: ``"20/m/ip,5/m/key"`` . Additionally, the rate limit mechanism is now used
+  throughout, including email confirmation cooldown as well as limitting failed login
+  attempts.  Therefore, the ``ACCOUNT_LOGIN_ATTEMPTS_LIMIT`` and
+  ``ACCOUNT_EMAIL_CONFIRMATION_COOLDOWN`` settings are deprecated.
+  See :doc:`Rate Limits <../account/rate_limits>` for details.
+
+
+0.60.1 (2024-01-15)
+*******************
+
+Fixes
+-----
+
+- User sessions: after changing your password in case of ``ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = False``, the list of
+  sessions woud be empty instead of showing your current session.
+
+- SAML: accessing the SLS/ACS views using a GET request would result in a crash (500).
+
+- SAML: the login view did not obey the ``SOCIALACCOUNT_LOGIN_ON_GET = False`` setting.
+
+
+0.60.0 (2024-01-05)
+*******************
+
+Note worthy changes
+-------------------
+
+- Google One Tap Sign-In is now supported.
+
+- You can now more easily change the URL to redirect to after a successful password
+  change/set via the newly introduced ``get_password_change_redirect_url()``
+  adapter method.
+
+- You can now configure the primary key of all models by configuring
+  ``ALLAUTH_DEFAULT_AUTO_FIELD``, for example to:
+  ``"hashid_field.HashidAutoField"``.
+
+
+Backwards incompatible changes
+------------------------------
+
+- You can now specify the URL path prefix that is used for all OpenID Connect
+  providers using ``SOCIALACCOUNT_OPENID_CONNECT_URL_PREFIX``. By default, it is
+  set to ``"oidc"``, meaning, an OpenID Connect provider with provider ID
+  ``foo`` uses ``/accounts/oidc/foo/login/`` as its login URL. Set it to empty
+  (``""``) to keep the previous URL structure (``/accounts/foo/login/``).
+
+- The SAML default attribute mapping for ``uid`` has been changed to only
+  include ``urn:oasis:names:tc:SAML:attribute:subject-id``. If the SAML response
+  does not contain that, it will fallback to use ``NameID``.
+
+
+0.59.0 (2023-12-13)
 *******************
 
 Note worthy changes
@@ -15,6 +154,26 @@ Note worthy changes
 - There is now an MFA adapter method ``can_delete_authenticator(authenticator)``
   available that can be used to prevent users from deactivating e.g. their TOTP
   authenticator.
+
+- Added a new app, user sessions, allowing users to view a list of all their
+  active sessions, as well as offering a means to end these sessions.
+
+- A configurable timeout (``SOCIALACCOUNT_REQUESTS_TIMEOUT``) is now applied to
+  all upstream requests.
+
+- Added a setting ``ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS`` to disable sending of
+  emails to unknown accounts.
+
+- You can now override the MFA forms via the ``MFA_FORMS`` setting.
+
+
+Backwards incompatible changes
+------------------------------
+
+- The account adapter method ``should_send_confirmation_mail()`` signature
+  changed. It now takes an extra ``signup`` (boolean) parameter.
+
+- Removed OAuth 1.0 based Bitbucket provider and LinkedIn provider.
 
 
 0.58.2 (2023-11-06)

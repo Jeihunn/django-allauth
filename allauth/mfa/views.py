@@ -1,7 +1,5 @@
 import base64
 
-from django import forms
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
@@ -11,21 +9,23 @@ from django.views.generic import TemplateView
 from django.views.generic.edit import FormView
 
 from allauth.account import app_settings as account_settings
-from allauth.account.adapter import get_adapter as get_account_adapter
 from allauth.account.decorators import reauthentication_required
 from allauth.account.stages import LoginStageController
 from allauth.account.views import BaseReauthenticateView
-from allauth.mfa import app_settings, signals, totp
+from allauth.mfa import app_settings, totp
 from allauth.mfa.adapter import get_adapter
 from allauth.mfa.forms import (
     ActivateTOTPForm,
     AuthenticateForm,
     DeactivateTOTPForm,
+    GenerateRecoveryCodesForm,
+    ReauthenticateForm,
 )
+from allauth.mfa.internal import flows
 from allauth.mfa.models import Authenticator
-from allauth.mfa.recovery_codes import RecoveryCodes
 from allauth.mfa.stages import AuthenticateStage
 from allauth.mfa.utils import is_mfa_enabled
+from allauth.utils import get_form_class
 
 
 class AuthenticateView(FormView):
@@ -45,6 +45,9 @@ class AuthenticateView(FormView):
         ret["user"] = self.stage.login.user
         return ret
 
+    def get_form_class(self):
+        return get_form_class(app_settings.FORMS, "authenticate", self.form_class)
+
     def form_valid(self, form):
         form.save()
         return self.stage.exit()
@@ -55,13 +58,20 @@ authenticate = AuthenticateView.as_view()
 
 @method_decorator(login_required, name="dispatch")
 class ReauthenticateView(BaseReauthenticateView):
-    form_class = AuthenticateForm
+    form_class = ReauthenticateForm
     template_name = "mfa/reauthenticate." + account_settings.TEMPLATE_EXTENSION
 
     def get_form_kwargs(self):
         ret = super().get_form_kwargs()
         ret["user"] = self.request.user
         return ret
+
+    def get_form_class(self):
+        return get_form_class(app_settings.FORMS, "reauthenticate", self.form_class)
+
+    def form_valid(self, form):
+        form.save()
+        return super().form_valid(form)
 
 
 reauthenticate = ReauthenticateView.as_view()
@@ -78,6 +88,7 @@ class IndexView(TemplateView):
             for auth in Authenticator.objects.filter(user=self.request.user)
         }
         ret["authenticators"] = authenticators
+        ret["MFA_SUPPORTED_TYPES"] = app_settings.SUPPORTED_TYPES
         ret["is_mfa_enabled"] = is_mfa_enabled(self.request.user)
         return ret
 
@@ -89,7 +100,6 @@ index = IndexView.as_view()
 class ActivateTOTPView(FormView):
     form_class = ActivateTOTPForm
     template_name = "mfa/totp/activate_form." + account_settings.TEMPLATE_EXTENSION
-    success_url = reverse_lazy("mfa_view_recovery_codes")
 
     def dispatch(self, request, *args, **kwargs):
         if is_mfa_enabled(request.user, [Authenticator.Type.TOTP]):
@@ -121,19 +131,16 @@ class ActivateTOTPView(FormView):
         ret["user"] = self.request.user
         return ret
 
+    def get_form_class(self):
+        return get_form_class(app_settings.FORMS, "activate_totp", self.form_class)
+
+    def get_success_url(self):
+        if Authenticator.Type.RECOVERY_CODES in app_settings.SUPPORTED_TYPES:
+            return reverse("mfa_view_recovery_codes")
+        return reverse("mfa_index")
+
     def form_valid(self, form):
-        totp_auth = totp.TOTP.activate(self.request.user, form.secret)
-        rc_auth = RecoveryCodes.activate(self.request.user)
-        for auth in [totp_auth, rc_auth]:
-            signals.authenticator_added.send(
-                sender=Authenticator,
-                user=self.request.user,
-                authenticator=auth.instance,
-            )
-        adapter = get_account_adapter(self.request)
-        adapter.add_message(
-            self.request, messages.SUCCESS, "mfa/messages/totp_activated.txt"
-        )
+        flows.totp.activate_totp(self.request, form)
         return super().form_valid(form)
 
 
@@ -174,22 +181,11 @@ class DeactivateTOTPView(FormView):
         ret.setdefault("data", {})
         return ret
 
+    def get_form_class(self):
+        return get_form_class(app_settings.FORMS, "deactivate_totp", self.form_class)
+
     def form_valid(self, form):
-        self.authenticator.wrap().deactivate()
-        rc_auth = Authenticator.objects.delete_dangling_recovery_codes(
-            self.authenticator.user
-        )
-        for auth in [self.authenticator, rc_auth]:
-            if auth:
-                signals.authenticator_removed.send(
-                    sender=Authenticator,
-                    user=self.request.user,
-                    authenticator=auth,
-                )
-        adapter = get_account_adapter(self.request)
-        adapter.add_message(
-            self.request, messages.SUCCESS, "mfa/messages/totp_deactivated.txt"
-        )
+        flows.totp.deactivate_totp(self.request, self.authenticator)
         return super().form_valid(form)
 
 
@@ -198,22 +194,12 @@ deactivate_totp = DeactivateTOTPView.as_view()
 
 @method_decorator(reauthentication_required, name="dispatch")
 class GenerateRecoveryCodesView(FormView):
-    form_class = forms.Form
+    form_class = GenerateRecoveryCodesForm
     template_name = "mfa/recovery_codes/generate." + account_settings.TEMPLATE_EXTENSION
     success_url = reverse_lazy("mfa_view_recovery_codes")
 
     def form_valid(self, form):
-        Authenticator.objects.filter(
-            user=self.request.user, type=Authenticator.Type.RECOVERY_CODES
-        ).delete()
-        rc_auth = RecoveryCodes.activate(self.request.user)
-        adapter = get_account_adapter(self.request)
-        adapter.add_message(
-            self.request, messages.SUCCESS, "mfa/messages/recovery_codes_generated.txt"
-        )
-        signals.authenticator_reset.send(
-            sender=Authenticator, user=self.request.user, authenticator=rc_auth.instance
-        )
+        flows.recovery_codes.generate_recovery_codes(self.request)
         return super().form_valid(form)
 
     def get_context_data(self, **kwargs):
@@ -227,21 +213,23 @@ class GenerateRecoveryCodesView(FormView):
         ret["unused_code_count"] = len(unused_codes)
         return ret
 
+    def get_form_kwargs(self):
+        ret = super().get_form_kwargs()
+        ret["user"] = self.request.user
+        return ret
+
 
 generate_recovery_codes = GenerateRecoveryCodesView.as_view()
 
 
-@method_decorator(reauthentication_required, name="dispatch")
 class DownloadRecoveryCodesView(TemplateView):
     template_name = "mfa/recovery_codes/download.txt"
     content_type = "text/plain"
 
     def dispatch(self, request, *args, **kwargs):
-        self.authenticator = get_object_or_404(
-            Authenticator,
-            user=self.request.user,
-            type=Authenticator.Type.RECOVERY_CODES,
-        )
+        self.authenticator = flows.recovery_codes.view_recovery_codes(self.request)
+        if not self.authenticator:
+            raise Http404()
         self.unused_codes = self.authenticator.wrap().get_unused_codes()
         if not self.unused_codes:
             return Http404()
@@ -261,17 +249,14 @@ class DownloadRecoveryCodesView(TemplateView):
 download_recovery_codes = DownloadRecoveryCodesView.as_view()
 
 
-@method_decorator(reauthentication_required, name="dispatch")
 class ViewRecoveryCodesView(TemplateView):
     template_name = "mfa/recovery_codes/index." + account_settings.TEMPLATE_EXTENSION
 
     def get_context_data(self, **kwargs):
         ret = super().get_context_data(**kwargs)
-        authenticator = get_object_or_404(
-            Authenticator,
-            user=self.request.user,
-            type=Authenticator.Type.RECOVERY_CODES,
-        )
+        authenticator = flows.recovery_codes.view_recovery_codes(self.request)
+        if not authenticator:
+            raise Http404()
         ret.update(
             {
                 "unused_codes": authenticator.wrap().get_unused_codes(),

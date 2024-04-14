@@ -90,7 +90,7 @@ def email_factory():
 def reauthentication_bypass():
     @contextmanager
     def f():
-        with patch("allauth.account.decorators.did_recently_authenticate") as m:
+        with patch("allauth.account.reauthentication.did_recently_authenticate") as m:
             m.return_value = True
             yield
 
@@ -104,9 +104,23 @@ def clear_context_request():
 
 @pytest.fixture
 def enable_cache(settings):
+    from django.core.cache import cache
+
     settings.CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         }
     }
+    cache.clear()
     yield
+
+
+@pytest.fixture
+def totp_validation_bypass():
+    @contextmanager
+    def f():
+        with patch("allauth.mfa.totp.validate_totp_code") as m:
+            m.return_value = True
+            yield
+
+    return f

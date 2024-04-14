@@ -1,4 +1,5 @@
 from allauth.account.adapter import get_adapter
+from allauth.account.app_settings import EmailVerificationMethod
 from allauth.account.utils import resume_login, stash_login, unstash_login
 from allauth.utils import import_callable
 
@@ -12,6 +13,11 @@ class LoginStage:
         self.controller = controller
         self.request = request
         self.login = login
+        self.state = (
+            self.login.state.setdefault("stages", {})
+            .setdefault(self.key, {})
+            .setdefault("data", {})
+        )
 
     def handle(self):
         return None, True
@@ -47,10 +53,9 @@ class LoginStageController:
     def is_handled(self, stage_key):
         return self.state.get(stage_key, {}).get("handled", False)
 
-    def set_handled(self, stage_key, data=None):
+    def set_handled(self, stage_key):
         stage_state = self.state.setdefault(stage_key, {})
         stage_state["handled"] = True
-        stage_state["data"] = data
 
     def get_stages(self):
         stages = []
@@ -77,4 +82,36 @@ class LoginStageController:
                 return response
             else:
                 assert cont
+                self.set_handled(stage.key)
         unstash_login(self.request)
+
+
+class EmailVerificationStage(LoginStage):
+    key = "verify_email"
+
+    def handle(self):
+        from allauth.account.utils import (
+            has_verified_email,
+            send_email_confirmation,
+        )
+
+        response, cont = None, True
+        login = self.login
+        email_verification = login.email_verification
+        if email_verification == EmailVerificationMethod.NONE:
+            pass
+        elif email_verification == EmailVerificationMethod.OPTIONAL:
+            # In case of OPTIONAL verification: send on signup.
+            if not has_verified_email(login.user, login.email) and login.signup:
+                send_email_confirmation(
+                    self.request, login.user, signup=login.signup, email=login.email
+                )
+        elif email_verification == EmailVerificationMethod.MANDATORY:
+            if not has_verified_email(login.user, login.email):
+                send_email_confirmation(
+                    self.request, login.user, signup=login.signup, email=login.email
+                )
+                response = get_adapter().respond_email_verification_sent(
+                    self.request, login.user
+                )
+        return response, cont

@@ -53,6 +53,11 @@ Available settings:
   track of these keys. Current versions use HMAC based keys that do not
   require server side state.
 
+``ACCOUNT_EMAIL_NOTIFICATIONS`` (default: ``False``)
+  When enabled, account related security notifications, such as "Your password
+  was changed", including information on user agent / IP address from where the
+  change originated, will be emailed.
+
 ``ACCOUNT_EMAIL_REQUIRED`` (default: ``False``)
   The user is required to hand over an email address when signing up.
 
@@ -72,17 +77,14 @@ Available settings:
   Subject-line prefix to use for email messages sent. By default, the
   name of the current ``Site`` (``django.contrib.sites``) is used.
 
+``ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS`` (default: ``True``)
+  Configures whether password reset attempts for email addresses which do not
+  have an account result in sending an email.
+
 ``ACCOUNT_DEFAULT_HTTP_PROTOCOL`` (default: ``"http"``)
   The default protocol used for when generating URLs, e.g. for the
   password forgotten procedure. Note that this is a default only --
   see the section on HTTPS for more information.
-
-``ACCOUNT_EMAIL_CONFIRMATION_COOLDOWN`` (default: ``180``)
-  Users can request email confirmation mails via the email management view, and,
-  implicitly, when logging in with an unverified account. In order to prevent
-  users from sending too many of these mails, a rate limit is in place that
-  allows for one confirmation mail to be sent per the specified cooldown period
-  (in seconds).
 
 ``ACCOUNT_EMAIL_MAX_LENGTH`` (default: ``254``)
   Maximum length of the email field. You won't need to alter this unless using
@@ -100,8 +102,9 @@ Available settings:
   The maximum amount of email addresses a user can associate to his account. It
   is safe to change this setting for an already running project -- it will not
   negatively affect users that already exceed the allowed amount. Note that if
-  you set the maximum to 1, users will not be able to change their email address
-  unless you enable ``ACCOUNT_CHANGE_EMAIL``.
+  you set the maximum to 1, users will not be able to change their email
+  address.
+
 
 ``ACCOUNT_FORMS``
   Used to override the builtin forms. Defaults to::
@@ -109,7 +112,9 @@ Available settings:
     ACCOUNT_FORMS = {
         'add_email': 'allauth.account.forms.AddEmailForm',
         'change_password': 'allauth.account.forms.ChangePasswordForm',
+        'confirm_login_code': 'allauth.account.forms.ConfirmLoginCodeForm',
         'login': 'allauth.account.forms.LoginForm',
+        'request_login_code': 'allauth.account.forms.RequestLoginCodeForm',
         'reset_password': 'allauth.account.forms.ResetPasswordForm',
         'reset_password_from_key': 'allauth.account.forms.ResetPasswordKeyForm',
         'set_password': 'allauth.account.forms.SetPasswordForm',
@@ -117,20 +122,24 @@ Available settings:
         'user_token': 'allauth.account.forms.UserTokenForm',
     }
 
-``ACCOUNT_LOGIN_ATTEMPTS_LIMIT`` (default: ``5``)
-  Number of failed login attempts. When this number is
-  exceeded, the user is prohibited from logging in for the
-  specified ``ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT`` seconds. Set to ``None``
-  to disable this functionality. Important: while this protects the
-  allauth login view, it does not protect Django's admin login from
-  being brute forced.
+``ACCOUNT_LOGIN_BY_CODE_ENABLED`` (default: ``False``)
+  "Login by email" offers an alternative method of logging in. Instead of
+  entering an email address and accompanying password, the user only enters the
+  email address.  Then, a one-time code is sent to that email address which
+  allows the user to login. This method is often referred to as "Magic Code
+  Login".  This setting controls whether or not this method of logging in is
+  enabled.
 
-``ACCOUNT_LOGIN_ATTEMPTS_TIMEOUT`` (default: ``300``)
-  Time period, in seconds, from last unsuccessful login attempt, during
-  which the user is prohibited from trying to log in.
+``ACCOUNT_LOGIN_BY_CODE_MAX_ATTEMPTS`` (default: ``3``)
+  This setting controls the maximum number of attempts the user has at inputting
+  a valid code.
+
+``ACCOUNT_LOGIN_BY_CODE_TIMEOUT`` (default: ``180``)
+  The code that is emailed has a limited life span. It expires this many seconds after
+  which it was sent.
 
 ``ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION`` (default: ``False``)
-  The default behaviour is not log users in and to redirect them to
+  The default behavior is not log users in and to redirect them to
   ``ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL``.
 
   By changing this setting to ``True``, users will automatically be logged in once
@@ -142,7 +151,7 @@ Available settings:
   Determines whether or not the user is automatically logged out by a
   GET request. `GET is not designed to modify the server state <http://programmers.stackexchange.com/questions/188860/>`_,
   and in this case it can be dangerous. See `LogoutView in the
-  documentation <http://docs.allauth.org/en/latest/views.html#logout>`_
+  documentation <https://docs.allauth.org/en/latest/account/views.html#logout>`_
   for details.
 
 ``ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE`` (default: ``False``)
@@ -195,28 +204,9 @@ Available settings:
   email address will be avoided, thus leaking information. Set it to
   ``"strict"`` to allow for signups to go through.
 
-``ACCOUNT_RATE_LIMITS``
-  In order to be secure out of the box various rate limits are in place. The
-  rate limit mechanism is backed by a Django cache. Hence, rate limiting will
-  not work properly if you are using the `DummyCache`. To disable, set to
-  ``{}``. When rate limits are hit the ``429.html`` template is rendered.
-  Defaults to::
-
-    ACCOUNT_RATE_LIMITS = {
-        # Change password view (for users already logged in)
-        "change_password": "5/m",
-        # Email management (e.g. add, remove, change primary)
-        "manage_email": "10/m",
-        # Request a password reset, global rate limit per IP
-        "reset_password": "20/m",
-        # Rate limit measured per individual email address
-        "reset_password_email": "5/m",
-        # Password reset (the view the password reset email links to).
-        "reset_password_from_key": "20/m",
-        # Signups.
-        "signup": "20/m",
-        # NOTE: Login is already protected via `ACCOUNT_LOGIN_ATTEMPTS_LIMIT`
-    }
+``ACCOUNT_RATE_LIMITS`` (default: ``{...}``)
+  In order to be secure out of the box various rate limits are in place.
+  See :doc:`Rate Limits <./rate_limits>` for details.
 
 ``ACCOUNT_REAUTHENTICATION_TIMEOUT`` (default: ``300``)
   Before asking the user to reauthenticate, we check if a successful

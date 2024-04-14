@@ -73,11 +73,10 @@ class AppSettings(object):
     @property
     def EMAIL_VERIFICATION(self):
         """
-        See email verification method
+        See email verification method.  When `None`, the default
+        `allauth.account` logic kicks in.
         """
-        from allauth.account import app_settings as account_settings
-
-        return self._setting("EMAIL_VERIFICATION", account_settings.EMAIL_VERIFICATION)
+        return self._setting("EMAIL_VERIFICATION", None)
 
     @property
     def EMAIL_AUTHENTICATION(self):
@@ -138,6 +137,14 @@ class AppSettings(object):
     @property
     def SOCIALACCOUNT_STR(self):
         return self._setting("SOCIALACCOUNT_STR", None)
+
+    @property
+    def REQUESTS_TIMEOUT(self):
+        return self._setting("REQUESTS_TIMEOUT", 5)
+
+    @property
+    def OPENID_CONNECT_URL_PREFIX(self):
+        return self._setting("OPENID_CONNECT_URL_PREFIX", "oidc")
 
 
 _app_settings = AppSettings("SOCIALACCOUNT_")

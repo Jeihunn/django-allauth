@@ -1,18 +1,16 @@
-import requests
 import xml.etree.ElementTree as ET
 
 from allauth.socialaccount import app_settings
+from allauth.socialaccount.adapter import get_adapter
 from allauth.socialaccount.providers.oauth2.views import (
     OAuth2Adapter,
     OAuth2CallbackView,
     OAuth2LoginView,
 )
 
-from .provider import NextCloudProvider
 
-
-class NextCloudAdapter(OAuth2Adapter):
-    provider_id = NextCloudProvider.id
+class NextCloudOAuth2Adapter(OAuth2Adapter):
+    provider_id = "nextcloud"
     settings = app_settings.PROVIDERS.get(provider_id, {})
     server = settings.get("SERVER", "https://nextcloud.example.org")
     access_token_url = "{0}/apps/oauth2/api/v1/token".format(server)
@@ -25,11 +23,15 @@ class NextCloudAdapter(OAuth2Adapter):
 
     def get_user_info(self, token, user_id):
         headers = {"Authorization": "Bearer {0}".format(token)}
-        resp = requests.get(self.profile_url + user_id, headers=headers)
+        resp = (
+            get_adapter()
+            .get_requests_session()
+            .get(self.profile_url + user_id, headers=headers)
+        )
         resp.raise_for_status()
         data = ET.fromstring(resp.content.decode())[1]
         return {d.tag: d.text.strip() for d in data if d.text is not None}
 
 
-oauth2_login = OAuth2LoginView.adapter_view(NextCloudAdapter)
-oauth2_callback = OAuth2CallbackView.adapter_view(NextCloudAdapter)
+oauth2_login = OAuth2LoginView.adapter_view(NextCloudOAuth2Adapter)
+oauth2_callback = OAuth2CallbackView.adapter_view(NextCloudOAuth2Adapter)

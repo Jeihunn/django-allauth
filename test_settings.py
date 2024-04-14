@@ -20,14 +20,20 @@ DATABASES = {
     }
 }
 
-ROOT_URLCONF = "allauth.urls"
+ROOT_URLCONF = "tests.urls"
 LOGIN_URL = "/login/"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            os.path.join(os.path.dirname(__file__), "example", "example", "templates")
+            os.path.join(
+                os.path.dirname(__file__),
+                "examples",
+                "regular-django",
+                "example",
+                "templates",
+            )
         ],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -65,6 +71,7 @@ INSTALLED_APPS = (
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admin",
+    "django.contrib.humanize",
     "allauth",
     "allauth.account",
     "allauth.mfa",
@@ -75,16 +82,17 @@ INSTALLED_APPS = (
     "allauth.socialaccount.providers.angellist",
     "allauth.socialaccount.providers.apple",
     "allauth.socialaccount.providers.asana",
+    "allauth.socialaccount.providers.atlassian",
     "allauth.socialaccount.providers.auth0",
     "allauth.socialaccount.providers.authentiq",
     "allauth.socialaccount.providers.baidu",
     "allauth.socialaccount.providers.basecamp",
     "allauth.socialaccount.providers.battlenet",
-    "allauth.socialaccount.providers.bitbucket",
     "allauth.socialaccount.providers.bitbucket_oauth2",
     "allauth.socialaccount.providers.bitly",
     "allauth.socialaccount.providers.box",
     "allauth.socialaccount.providers.cilogon",
+    "allauth.socialaccount.providers.clever",
     "allauth.socialaccount.providers.coinbase",
     "allauth.socialaccount.providers.dataporten",
     "allauth.socialaccount.providers.daum",
@@ -97,6 +105,7 @@ INSTALLED_APPS = (
     "allauth.socialaccount.providers.draugiem",
     "allauth.socialaccount.providers.drip",
     "allauth.socialaccount.providers.dropbox",
+    "allauth.socialaccount.providers.dummy",
     "allauth.socialaccount.providers.dwolla",
     "allauth.socialaccount.providers.edmodo",
     "allauth.socialaccount.providers.edx",
@@ -125,7 +134,6 @@ INSTALLED_APPS = (
     "allauth.socialaccount.providers.kakao",
     "allauth.socialaccount.providers.lemonldap",
     "allauth.socialaccount.providers.line",
-    "allauth.socialaccount.providers.linkedin",
     "allauth.socialaccount.providers.linkedin_oauth2",
     "allauth.socialaccount.providers.mailchimp",
     "allauth.socialaccount.providers.mailru",
@@ -187,6 +195,7 @@ INSTALLED_APPS = (
     "allauth.socialaccount.providers.zoom",
     "allauth.socialaccount.providers.okta",
     "allauth.socialaccount.providers.feishu",
+    "allauth.usersessions",
 )
 
 AUTHENTICATION_BACKENDS = (
@@ -218,7 +227,6 @@ PASSWORD_HASHERS = [
 
 
 ACCOUNT_EMAIL_CONFIRMATION_COOLDOWN = 0
-ACCOUNT_RATE_LIMITS = {}
 
 SOCIALACCOUNT_QUERY_EMAIL = True
 SOCIALACCOUNT_PROVIDERS = {
@@ -245,3 +253,5 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
     }
 }
+
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True
