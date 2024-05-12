@@ -9,13 +9,10 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _, pgettext
 
 from allauth.account.internal import flows
+from allauth.account.stages import EmailVerificationStage
 from allauth.core import context, ratelimit
+from allauth.utils import get_username_max_length, set_form_field_order
 
-from ..utils import (
-    build_absolute_uri,
-    get_username_max_length,
-    set_form_field_order,
-)
 from . import app_settings
 from .adapter import get_adapter
 from .app_settings import AuthenticationMethod
@@ -78,11 +75,14 @@ class PasswordField(forms.CharField):
 class SetPasswordField(PasswordField):
     def __init__(self, *args, **kwargs):
         kwargs["autocomplete"] = "new-password"
-        super(SetPasswordField, self).__init__(*args, **kwargs)
+        kwargs.setdefault(
+            "help_text", password_validation.password_validators_help_text_html()
+        )
+        super().__init__(*args, **kwargs)
         self.user = None
 
     def clean(self, value):
-        value = super(SetPasswordField, self).clean(value)
+        value = super().clean(value)
         value = get_adapter().clean_password(value, user=self.user)
         return value
 
@@ -336,7 +336,7 @@ class BaseSignupForm(_base_signup_form_class()):
         return value
 
     def clean_email(self):
-        value = self.cleaned_data["email"]
+        value = self.cleaned_data["email"].lower()
         value = get_adapter().clean_email(value)
         if value and app_settings.UNIQUE_EMAIL:
             value = self.validate_unique_email(value)
@@ -381,6 +381,7 @@ class BaseSignupForm(_base_signup_form_class()):
             adapter.send_account_already_exists_mail(email)
             user = None
             resp = adapter.respond_email_verification_sent(request, None)
+            request.session[flows.login.LOGIN_SESSION_KEY] = EmailVerificationStage.key
         else:
             user = self.save(request)
             resp = None
@@ -415,8 +416,41 @@ class SignupForm(BaseSignupForm):
         if hasattr(self, "field_order"):
             set_form_field_order(self, self.field_order)
 
+        honeypot_field_name = app_settings.SIGNUP_FORM_HONEYPOT_FIELD
+        if honeypot_field_name:
+            self.fields[honeypot_field_name] = forms.CharField(
+                required=False,
+                label="",
+                widget=forms.TextInput(
+                    attrs={
+                        "style": "position: absolute; right: -99999px;",
+                        "tabindex": "-1",
+                        "autocomplete": "nope",
+                    }
+                ),
+            )
+
+    def try_save(self, request):
+        """
+        override of parent class method that adds additional catching
+        of a potential bot filling out the honeypot field and returns a
+        'fake' email verification response if honeypot was filled out
+        """
+        honeypot_field_name = app_settings.SIGNUP_FORM_HONEYPOT_FIELD
+        if honeypot_field_name:
+            if self.cleaned_data[honeypot_field_name]:
+                user = None
+                adapter = get_adapter()
+                # honeypot fields work best when you do not report to the bot
+                # that anything went wrong. So we return a fake email verification
+                # sent response but without creating a user
+                resp = adapter.respond_email_verification_sent(request, None)
+                return user, resp
+
+        return super().try_save(request)
+
     def clean(self):
-        super(SignupForm, self).clean()
+        super().clean()
 
         # `password` cannot be of type `SetPasswordField`, as we don't
         # have a `User` yet. So, let's populate a dummy user to be used
@@ -463,7 +497,7 @@ class AddEmailForm(UserForm):
     def clean_email(self):
         from allauth.account import signals
 
-        value = self.cleaned_data["email"]
+        value = self.cleaned_data["email"].lower()
         adapter = get_adapter()
         value = adapter.clean_email(value)
         users = filter_users_by_email(value)
@@ -504,10 +538,7 @@ class ChangePasswordForm(PasswordVerificationMixin, UserForm):
     oldpassword = PasswordField(
         label=_("Current Password"), autocomplete="current-password"
     )
-    password1 = SetPasswordField(
-        label=_("New Password"),
-        help_text=password_validation.password_validators_help_text_html(),
-    )
+    password1 = SetPasswordField(label=_("New Password"))
     password2 = PasswordField(label=_("New Password (again)"))
 
     def __init__(self, *args, **kwargs):
@@ -524,10 +555,7 @@ class ChangePasswordForm(PasswordVerificationMixin, UserForm):
 
 
 class SetPasswordForm(PasswordVerificationMixin, UserForm):
-    password1 = SetPasswordField(
-        label=_("Password"),
-        help_text=password_validation.password_validators_help_text_html(),
-    )
+    password1 = SetPasswordField(label=_("Password"))
     password2 = PasswordField(label=_("Password (again)"))
 
     def __init__(self, *args, **kwargs):
@@ -552,7 +580,7 @@ class ResetPasswordForm(forms.Form):
     )
 
     def clean_email(self):
-        email = self.cleaned_data["email"]
+        email = self.cleaned_data["email"].lower()
         email = get_adapter().clean_email(email)
         self.users = filter_users_by_email(email, is_active=True, prefer_verified=True)
         if not self.users and not app_settings.PREVENT_ENUMERATION:
@@ -563,18 +591,10 @@ class ResetPasswordForm(forms.Form):
         email = self.cleaned_data["email"]
         if not self.users:
             if app_settings.EMAIL_UNKNOWN_ACCOUNTS:
-                self._send_unknown_account_mail(request, email)
+                flows.signup.send_unknown_account_mail(request, email)
         else:
             self._send_password_reset_mail(request, email, self.users, **kwargs)
         return email
-
-    def _send_unknown_account_mail(self, request, email):
-        signup_url = build_absolute_uri(request, reverse("account_signup"))
-        context = {
-            "request": request,
-            "signup_url": signup_url,
-        }
-        get_adapter().send_mail("account/email/unknown_account", email, context)
 
     def _send_password_reset_mail(self, request, email, users, **kwargs):
         token_generator = kwargs.get("token_generator", default_token_generator)

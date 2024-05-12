@@ -1,3 +1,5 @@
+from typing import Optional
+
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 
 from allauth.account.utils import get_next_redirect_url, get_request_param
@@ -12,7 +14,10 @@ class ProviderException(Exception):
 
 
 class Provider:
-    slug = None
+    name: str  # Provided by subclasses
+    id: str  # Provided by subclasses
+    slug: Optional[str] = None  # Provided by subclasses
+
     uses_apps = True
     supports_redirect = False
     # Indicates whether or not this provider supports logging in by posting an
@@ -112,9 +117,7 @@ class Provider:
         socialaccount = SocialAccount(
             extra_data=extra_data,
             uid=uid,
-            provider=(self.app.provider_id or self.app.provider)
-            if self.app
-            else self.id,
+            provider=self.sub_id,
         )
         email_addresses = self.extract_email_addresses(response)
         self.cleanup_email_addresses(
@@ -212,6 +215,12 @@ class Provider:
         if state is None:
             raise PermissionDenied()
         return state
+
+    @property
+    def sub_id(self) -> str:
+        return (
+            (self.app.provider_id or self.app.provider) if self.uses_apps else self.id
+        )
 
 
 class ProviderAccount(object):

@@ -1,4 +1,29 @@
-0.62.0 (unreleased)
+0.63.0 (unreleased)
+*******************
+
+- New providers: TikTok, Lichess.
+
+- Starting since version 0.62.0, new email addresses are always stored as lower
+  case. In this version, we take the final step and also convert existing data
+  to lower case, alter the database indices and perform lookups
+  accordingly. Migrations are in place.  For rationale, see the note about email
+  case sensitivity in the documentation.
+
+- An official API for single-page and mobile application support is now
+  available, via the new ``allauth.headless`` app.
+
+- Added support for a honeypot field on the signup form. Real users do not see
+  the field and therefore leave it empty. When bots do fill out the field
+  account creation is silently skipped.
+
+
+0.62.1 (2024-04-24)
+*******************
+
+- The ``tests`` package was accidentally packaged, fixed.
+
+
+0.62.0 (2024-04-22)
 *******************
 
 Note worthy changes
@@ -14,6 +39,30 @@ Note worthy changes
 
 - Added support for logging in by email using a special code, also known as
   "Magic Code Login"
+
+- Email addresses are now always stored as lower case. For rationale, see the
+  note about email case sensitivity in the documentation.
+
+- You can now alter the ``state`` parameter that is typically passed to the
+  provider by overriding the new ``generate_state_param()`` adapter method.
+
+- The URLs were not "hackable". For example, while ``/accounts/login/`` is valid
+  ``/accounts/`` was not. Similarly, ``/accounts/social/connections/`` was
+  valid, but ``/accounts/social/`` resulted in a 404. This has been
+  addressed. Now, ``/accounts/`` redirects to the login or email management
+  page, depending on whether or not the user is authenticated.  All
+  ``/accounts/social/*`` URLs are now below ``/accounts/3rdparty/*``, where
+  ``/accounts/social/connections`` is moved to the top-level
+  ``/accounts/3rdparty/``.  The old endpoints still work as redirects are in
+  place.
+
+- Added a new setting, ``SOCIALACCOUNT_ONLY``, which when set to ``True``,
+  disables all functionality with respect to local accounts.
+
+- The OAuth2 handshake was not working properly in case of
+  ``SESSION_COOKIE_SAMESITE = "Strict"``, fixed.
+
+- Facebook: the default Graph API version is now v19.0.
 
 
 Backwards incompatible changes
@@ -104,6 +153,22 @@ Fixes
 - SAML: accessing the SLS/ACS views using a GET request would result in a crash (500).
 
 - SAML: the login view did not obey the ``SOCIALACCOUNT_LOGIN_ON_GET = False`` setting.
+
+
+Backwards incompatible changes
+------------------------------
+
+- Formally, email addresses are case sensitive because the local part (the part
+  before the "@") can be a case sensitive user name.  To deal with this,
+  workarounds have been in place for a long time that store email addresses in
+  their original case, while performing lookups in a case insensitive
+  style. This approach led to subtle bugs in upstream code, and also comes at a
+  performance cost (``__iexact`` lookups). The latter requires case insensitive
+  index support, which not all databases support. Re-evaluating the approach in
+  current times has led to the conclusion that the benefits do not outweigh the
+  costs.  Therefore, email addresses are now always stored as lower case, and
+  migrations are in place to address existing records.
+
 
 
 0.60.0 (2024-01-05)

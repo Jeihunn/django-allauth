@@ -66,6 +66,7 @@ sensitive_post_parameters_m = method_decorator(
 )
 
 
+@method_decorator(rate_limit(action="login"), name="dispatch")
 class LoginView(
     NextRedirectMixin,
     RedirectAuthenticatedUserMixin,
@@ -79,6 +80,8 @@ class LoginView(
     @sensitive_post_parameters_m
     @method_decorator(never_cache)
     def dispatch(self, request, *args, **kwargs):
+        if allauth_app_settings.SOCIALACCOUNT_ONLY and request.method != "GET":
+            raise PermissionDenied()
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
@@ -98,7 +101,9 @@ class LoginView(
 
     def get_context_data(self, **kwargs):
         ret = super().get_context_data(**kwargs)
-        signup_url = self.passthrough_next_url(reverse("account_signup"))
+        signup_url = None
+        if not allauth_app_settings.SOCIALACCOUNT_ONLY:
+            signup_url = self.passthrough_next_url(reverse("account_signup"))
         site = get_current_site(self.request)
 
         ret.update(
@@ -106,6 +111,7 @@ class LoginView(
                 "signup_url": signup_url,
                 "site": site,
                 "SOCIALACCOUNT_ENABLED": allauth_app_settings.SOCIALACCOUNT_ENABLED,
+                "SOCIALACCOUNT_ONLY": allauth_app_settings.SOCIALACCOUNT_ONLY,
                 "LOGIN_BY_CODE_ENABLED": app_settings.LOGIN_BY_CODE_ENABLED,
             }
         )
@@ -171,6 +177,7 @@ class SignupView(
                 "login_url": login_url,
                 "site": site,
                 "SOCIALACCOUNT_ENABLED": allauth_app_settings.SOCIALACCOUNT_ENABLED,
+                "SOCIALACCOUNT_ONLY": allauth_app_settings.SOCIALACCOUNT_ONLY,
             }
         )
         return ret
@@ -342,8 +349,8 @@ class ConfirmEmailView(NextRedirectMixin, LogoutFunctionalityMixin, TemplateView
     def get_redirect_url(self):
         url = self.get_next_url()
         if not url:
-            url = get_adapter(self.request).get_email_confirmation_redirect_url(
-                self.request
+            url = get_adapter(self.request).get_email_verification_redirect_url(
+                self.object.email_address,
             )
         return url
 
@@ -872,7 +879,7 @@ class ConfirmLoginCodeView(RedirectAuthenticatedUserMixin, NextRedirectMixin, Fo
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["code"] = self.pending_login.get("code")
+        kwargs["code"] = self.pending_login.get("code", "")
         return kwargs
 
     def form_valid(self, form):

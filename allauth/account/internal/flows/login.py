@@ -1,9 +1,9 @@
-from django.urls import reverse
-
 from allauth.account.adapter import get_adapter
 from allauth.account.authentication import record_authentication
 from allauth.core.exceptions import ImmediateHttpResponse
-from allauth.utils import build_absolute_uri
+
+
+LOGIN_SESSION_KEY = "account_login"
 
 
 def _get_login_hook_kwargs(login):
@@ -56,12 +56,3 @@ def resume_login(request, login):
     except ImmediateHttpResponse as e:
         response = e.response
     return response
-
-
-def send_unknown_account_email(request, email):
-    signup_url = build_absolute_uri(request, reverse("account_signup"))
-    context = {
-        "request": request,
-        "signup_url": signup_url,
-    }
-    get_adapter().send_mail("account/email/unknown_account", email, context)
